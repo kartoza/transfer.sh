@@ -60,6 +60,7 @@ import (
 	"github.com/russross/blackfriday"
 
 	"encoding/base64"
+
 	qrcode "github.com/skip2/go-qrcode"
 )
 
@@ -162,6 +163,7 @@ func (s *Server) previewHandler(w http.ResponseWriter, r *http.Request) {
 
 	hostname := getURL(r).Host
 	webAddress := resolveWebAddress(r)
+	webAddress = webAddress + s.webBaseURL
 
 	data := struct {
 		ContentType   string
@@ -170,6 +172,7 @@ func (s *Server) previewHandler(w http.ResponseWriter, r *http.Request) {
 		Url           string
 		Hostname      string
 		WebAddress    string
+		BaseURL       string
 		ContentLength uint64
 		GAKey         string
 		UserVoiceKey  string
@@ -181,6 +184,7 @@ func (s *Server) previewHandler(w http.ResponseWriter, r *http.Request) {
 		resolvedUrl,
 		hostname,
 		webAddress,
+		s.webBaseURL,
 		contentLength,
 		s.gaKey,
 		s.userVoiceKey,
@@ -202,15 +206,18 @@ func (s *Server) viewHandler(w http.ResponseWriter, r *http.Request) {
 
 	hostname := getURL(r).Host
 	webAddress := resolveWebAddress(r)
+	webAddress = webAddress + s.webBaseURL
 
 	data := struct {
 		Hostname     string
 		WebAddress   string
+		BaseURL      string
 		GAKey        string
 		UserVoiceKey string
 	}{
 		hostname,
 		webAddress,
+		s.webBaseURL,
 		s.gaKey,
 		s.userVoiceKey,
 	}
@@ -325,7 +332,7 @@ func (s *Server) postHandler(w http.ResponseWriter, r *http.Request) {
 
 			}
 
-			relativeURL, _ := url.Parse(path.Join(token, filename))
+			relativeURL, _ := url.Parse(path.Join(s.webBaseURL, token, filename))
 			fmt.Fprintln(w, getURL(r).ResolveReference(relativeURL).String())
 
 			cleanTmpFile(file)
@@ -476,8 +483,8 @@ func (s *Server) putHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/plain")
 
-	relativeURL, _ := url.Parse(path.Join(token, filename))
-	deleteUrl, _ := url.Parse(path.Join(token, filename, metadata.DeletionToken))
+	relativeURL, _ := url.Parse(path.Join(s.webBaseURL, token, filename))
+	deleteUrl, _ := url.Parse(path.Join(s.webBaseURL, token, filename, metadata.DeletionToken))
 
 	w.Header().Set("X-Url-Delete", resolveUrl(r, deleteUrl, true))
 

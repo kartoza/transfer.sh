@@ -52,8 +52,9 @@ import (
 	web "github.com/dutchcoders/transfer.sh-web"
 	assetfs "github.com/elazarl/go-bindata-assetfs"
 
-	autocert "golang.org/x/crypto/acme/autocert"
 	"path/filepath"
+
+	autocert "golang.org/x/crypto/acme/autocert"
 )
 
 const SERVER_INFO = "transfer.sh"
@@ -115,6 +116,16 @@ func WebPath(s string) OptionFn {
 		}
 
 		srvr.webPath = s
+	}
+}
+
+func WebBaseURL(s string) OptionFn {
+	return func(srvr *Server) {
+		if s[0:] != "/" {
+			s = "/" + s
+		}
+
+		srvr.webBaseURL = s
 	}
 }
 
@@ -240,6 +251,7 @@ type Server struct {
 	tempPath string
 
 	webPath      string
+	webBaseURL   string
 	gaKey        string
 	userVoiceKey string
 
@@ -252,6 +264,19 @@ type Server struct {
 	Certificate string
 
 	LetsEncryptCache string
+}
+
+func (s *Server) stripBaseURLPrefix(path string) string {
+	return strings.Replace(path, s.webBaseURL, "", 1)
+}
+
+type staticFS struct {
+	server *Server
+}
+
+func (f staticFS) Open(path string) (http.File, error) {
+	d := http.Dir(f.server.webPath)
+	return d.Open(f.server.stripBaseURLPrefix(path))
 }
 
 func New(options ...OptionFn) (*Server, error) {
@@ -285,21 +310,30 @@ func (s *Server) Run() {
 
 	r := mux.NewRouter()
 
+	// We may have prefix from base url e.g: http://<domain>/baseUrl
+	if len(s.webBaseURL) != 0 {
+		r = r.PathPrefix(s.webBaseURL).Subrouter()
+	}
+
 	var fs http.FileSystem
 
 	if s.webPath != "" {
 		s.logger.Println("Using static file path: ", s.webPath)
 
-		fs = http.Dir(s.webPath)
+		fs = &staticFS{s}
 
 		htmlTemplates, _ = htmlTemplates.ParseGlob(s.webPath + "*.html")
 		textTemplates, _ = textTemplates.ParseGlob(s.webPath + "*.txt")
 	} else {
 		fs = &assetfs.AssetFS{
-			Asset:    web.Asset,
-			AssetDir: web.AssetDir,
+			Asset: func(path string) ([]byte, error) {
+				return web.Asset(s.stripBaseURLPrefix(path))
+			},
+			AssetDir: func(path string) ([]string, error) {
+				return web.AssetDir(s.stripBaseURLPrefix(path))
+			},
 			AssetInfo: func(path string) (os.FileInfo, error) {
-				return os.Stat(path)
+				return os.Stat(s.stripBaseURLPrefix(path))
 			},
 			Prefix: web.Prefix,
 		}
@@ -380,6 +414,7 @@ func (s *Server) Run() {
 	mime.AddExtensionType(".md", "text/x-markdown")
 
 	s.logger.Printf("Transfer.sh server started.\nusing temp folder: %s\nusing storage provider: %s", s.tempPath, s.storage.Type())
+	s.logger.Printf("using base url: %s", s.webBaseURL)
 
 	h := handlers.PanicHandler(handlers.LogHandler(LoveHandler(s.RedirectHandler(r)), handlers.NewLogOptions(s.logger.Printf, "_default_")), nil)
 

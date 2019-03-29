@@ -77,6 +77,11 @@ var globalFlags = []cli.Flag{
 		Value: "",
 	},
 	cli.StringFlag{
+		Name:  "web-base-url",
+		Usage: "root url path appended to hostname",
+		Value: "",
+	},
+	cli.StringFlag{
 		Name:  "ga-key",
 		Usage: "key for google analytics (front end)",
 		Value: "",
@@ -232,6 +237,10 @@ func New() *Cmd {
 
 		if v := c.String("web-path"); v != "" {
 			options = append(options, server.WebPath(v))
+		}
+
+		if v := c.String("web-base-url"); v != "" {
+			options = append(options, server.WebBaseURL(v))
 		}
 
 		if v := c.String("ga-key"); v != "" {
